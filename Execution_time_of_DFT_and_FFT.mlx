@@ -1,0 +1,85 @@
+% DFT Implementation: 
+function output = DFT(input) 
+    % myDFT2: Compute the Discrete Fourier Transform (DFT) of an input signal. 
+    % This function uses the formula: 
+    %   X(k) = sum(x(n) * exp(-j*2*pi*k*n/N)) for n = 0 to N-1, where N is 
+    %   the length of the input signal. 
+ 
+    N = length(input);  % N is the length of the input signal 
+    output = zeros(1, N);  % Initialize the output DFT vector 
+    n = (0:N-1) ;  % Time indices from 0 to N-1 
+     
+    % Loop through each frequency (k) 
+    for k = 0:N-1 
+        % Compute the DFT using the provided formula 
+        % Each iteration calculates one component (X(k)) of the DFT 
+        output(k+1) = sum(input .* exp((-1j*2*pi*k/N)*n)); 
+    end 
+end 
+
+% Test Signal Generation: 
+% Part b: Generate random test signal and measure execution time 
+L = 4096;  % Length of the signal 
+xi = randn(1, L);  % Generate a random signal 
+
+% Execution Time Measurement:
+% Measure DFT execution time 
+fprintf('Measuring execution time of Discrete Fourier Transform (DFT)...\n'); 
+tic; 
+dft_result = DFT(xi);  % Compute the DFT of the generated signal using a custom 
+implementation 
+execution_time_dft = toc; 
+fprintf('DFT execution time: %.6f seconds\n', execution_time_dft); 
+ 
+% Measure FFT execution time 
+fprintf('Measuring execution time of Fast Fourier Transform (FFT)...\n'); 
+tic; 
+fft_result = fft(xi);  % Use MATLAB's built-in FFT function to compute the FFT of the 
+signal 
+execution_time_fft = toc; 
+fprintf('FFT execution time: %.6f seconds\n', execution_time_fft); 
+ 
+% Part c: Compare execution times 
+fprintf('\nComparison of Execution Times:\n'); 
+if execution_time_dft < execution_time_fft 
+fprintf('DFT offers superior performance in this case.\n'); 
+else 
+fprintf('FFT offers superior performance in this case.\n'); 
+end 
+% Generate a range of signal lengths 
+signal_lengths = 2.^(8:13);  % Vary the signal length from 256 to 8192 
+num_lengths = length(signal_lengths); 
+ 
+ 
+% Initialize arrays to store execution times 
+dft_execution_times = zeros(1, num_lengths); 
+fft_execution_times = zeros(1, num_lengths); 
+ 
+% Measure execution times for each signal length 
+for i = 1:num_lengths 
+    % Generate a random test signal 
+    random_signal = randn(1, signal_lengths(i)); 
+     
+    % Measure DFT execution time 
+    tic; 
+    dft_result = DFT(random_signal); 
+    dft_execution_times(i) = toc; 
+     
+    % Measure FFT execution time 
+    tic; 
+    fft_result = fft(random_signal); 
+    fft_execution_times(i) = toc; 
+end 
+ 
+% Plot the results 
+figure; 
+loglog(signal_lengths, dft_execution_times, '-o', 'DisplayName', 'DFT'); 
+hold on; 
+loglog(signal_lengths, fft_execution_times, '-o', 'DisplayName', 'FFT'); 
+hold off; 
+ 
+title('Execution Time Comparison: DFT vs FFT'); 
+xlabel('Signal Length'); 
+ylabel('Execution Time (seconds)'); 
+legend('show'); 
+grid on;
