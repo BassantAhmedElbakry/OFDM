@@ -1,0 +1,1251 @@
+%%%%%%%%%%%% QPSK No code and Rayleigh Channel: %%%%%%%%%%%% 
+%Define the number of symbols% 
+numberOfsymbol =500; 
+%Define the number of bits per symbol% 
+bits_per_symbol=128; 
+ 
+%Define Total number of bits% 
+numberOfBits = bits_per_symbol*numberOfsymbol; 
+ 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = sqrt(0.5); 
+ 
+% Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_ofdm_qpsk_no_code_fadding_more_symbol = zeros(1, length(SNR)); 
+ 
+%Bit Energy QPSk% 
+Eb_QPSK = ((1 + 1) * 4) / 4/2; 
+ 
+%Define No% 
+N0_QPSK = Eb_QPSK .* 10 .^ (- .1 .* SNR); 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, numberOfBits); 
+ 
+%channel response generation 
+h_r =  (variance_h) * randn(1, 80); 
+h_i =  (variance_h) * randn(1, 80); 
+h_QPSK = h_r + h_i * 1i; 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:bits_per_symbol 
+        %Define Data Burst% 
+        data=my_data(bits_per_symbol*(q-1)+1:bits_per_symbol*q); 
+        % Interleaver % 
+        interleaver_output = Interleaver_Block(data,8,16); 
+        % End of Interleaver % 
+ 
+  
+ 
+        %Mapper % 
+        [QPSK_Mapper_output] =QPSK_Mapper(interleaver_output,bits_per_symbol); 
+        %% End of Mapper % 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QPSK_Mapper_output , 64); 
+        %  End of 64-point IFFT % 
+        % Cyclic Extension % 
+        Mapper_output_length= length(QPSK_Mapper_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*Mapper_output_length/4+1):Mapper_output_length) 
+IFFT_block_output]; 
+ 
+        % End of Cyclic Extension % 
+        %%%%%%%%%%%%%%%%%%% fading channel %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+        %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+ 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+ 
+        %apply channel effect 
+        [data_AfterChannel, h_QPSK] = Fadding_channel(yk_hat_2, 
+N0_QPSK(n),0,h_QPSK(1:length(yk_hat_2))); 
+ 
+        %re-apply ifft 
+        IFFT_block_output = ifft(data_AfterChannel , 64); 
+ 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+ 
+ 
+        %%%%%%%%%%%%%%%% end of fading channel %%%%%%%%%%%%%%%%%%% 
+        %%%%%%%%%%%%%%%%% receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        % Remove cyclic extension 
+        Data_Length=length(Cyclic_Extension_Output); 
+        Decycled_data= Cyclic_Extension_Output((Data_Length/5)+1 : Data_Length); 
+ 
+        % FFT  
+ 
+        Decycled_data = fft(Decycled_data); 
+        %Remove the channel effect 
+        Data_After_removing_Channel_effect=Decycled_data ./ 
+h_QPSK(1:length(Decycled_data)); 
+ 
+        % QPSK Demapper 
+        [QPSK_Demapped_Data] = QPSK_Demapper(Data_After_removing_Channel_effect); 
+ 
+        % remove interlever effect 
+        DeInterleaver_Data = Interleaver_Block(QPSK_Demapped_Data,16,8); 
+        temp=[temp DeInterleaver_Data]; 
+    end 
+    DeInterleaver_Data=temp; 
+ 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(DeInterleaver_Data)) ~= DeInterleaver_Data); 
+    BER_ofdm_qpsk_no_code_fadding_more_symbol(n) = error / length(DeInterleaver_Data); 
+ 
+end 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_ofdm_qpsk_no_code_fadding_more_symbol); 
+xlabel ('SNR(dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR: QPSK No Code & Rayleigh Fading Channel ');
+
+%%%%%%%%%% QPSK With repetition Code and Rayleigh Channel: %%%%%%%%%%
+ 
+%Define the number of symbols% 
+No_of_Symbols =1550; 
+%Define the repetition value% 
+repetition=3; 
+%Define the number of bits per symbol% 
+bits_ber_symbol=128; 
+%Define the number of bits per symbol before repetition% 
+No_Of_Bits_Per_Symbol_Before_Repetition=42; 
+%Define the number of bits per symbol after repetition% 
+No_Of_Bits_Per_Symbol_After_Repetition=42*3; 
+%Define Padding bits% 
+Padding =bits_per_symbol-No_Of_Bits_Per_Symbol_After_Repetition; 
+%Define Total number of bits% 
+No_Of_Bits = No_Of_Bits_Per_Symbol_Before_Repetition*No_of_Symbols; 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%Define Noise%  
+ 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = 0.5; 
+%Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_ofdm_qpsk_with_rep_fadding_more_symbol = zeros(1, length(SNR)); 
+%Define Energy per bit% 
+Eb_QPSK = 1/3*((1 + 1) * 4) / 4/2; 
+%Define Noise No% 
+N0_QPSK = Eb_QPSK .* 10 .^ (- .1 .* SNR); 
+%channel response generation 
+h_r =  (variance_h) * randn(1, 80); 
+h_i =  (variance_h) * randn(1, 80); 
+h_QPSK = h_r + h_i * 1i; 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:No_of_Symbols 
+ 
+        %Define Data Burst% 
+        data_before_padding=my_data((No_Of_Bits_Per_Symbol_Before_Repetition*(q
+1)+1):No_Of_Bits_Per_Symbol_Before_Repetition*q); 
+        data_with_rep = repelem(data_before_padding,repetition); 
+        %Pad the data% 
+        data_after_padding=[data_with_rep zeros(1,Padding)]; 
+        %Interleaver% 
+        interleaver_output = Interleaver_Block( data_after_padding,8,16); 
+        % End of Interleaver % 
+        %Mapper % 
+        [QPSK_Mapper_output] =QPSK_Mapper(interleaver_output,bits_per_symbol); 
+        %% End of Mapper % 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QPSK_Mapper_output , 64); 
+        % End of 64-point IFFT % 
+        %Cyclic Extension % 
+        Mapper_output_length= length(QPSK_Mapper_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*Mapper_output_length/4+1):Mapper_output_length) 
+IFFT_block_output]; 
+        % End of Cyclic Extension % 
+        %%%%%%%%%%%%%%%%%%% fading channel %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+        %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+        %apply channel effect 
+        [data_AfterChannel, h_QPSK] = Fadding_channel(yk_hat_2, 
+N0_QPSK(n),0,h_QPSK(1:length(yk_hat_2)));  
+ 
+        %re-apply ifft 
+        IFFT_block_output = ifft(data_AfterChannel , 64); 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+        %%%%%%%%%%%%%%%%% receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        % removing cyclic extension 
+        Data_Length_1=length(Cyclic_Extension_Output); 
+        Decycled_Data= Cyclic_Extension_Output((Data_Length_1/5)+1 : Data_Length_1); 
+ 
+        % remove ifft 
+        Decycled_Data = fft(Decycled_Data); 
+        %remove the channel effect 
+        Data_After_removing_Channel_effect= Decycled_Data ./ h_QPSK; 
+        % remove mapper 
+        [QPSK_Demapped_Data] = QPSK_Demapper(Data_After_removing_Channel_effect); 
+        % remove interlever 
+        DeInterleaver_Output = Interleaver_Block(QPSK_Demapped_Data,16,8); 
+        %%%% remove padding 
+DeInterleaver_Output_without_pading=DeInterleaver_Output(1:length(DeInterleaver_Output)-2); 
+        length_3=length( DeInterleaver_Output_without_pading); 
+        %%%%%%%%%%%% decoding %%%%%%%%%%%%%%%%%% 
+        Decoded_data = zeros(1, length(DeInterleaver_Output_without_pading) / 3); 
+        for i = 1:3:length(DeInterleaver_Output_without_pading) 
+            segment = DeInterleaver_Output_without_pading(i:i+2); 
+            Decoded_data((i+2)/3) = mode(segment); % Using the majority voting 
+        end 
+        temp=[temp Decoded_data]; 
+    end 
+    Decoded_data=temp; 
+ 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(Decoded_data)) ~= Decoded_data); 
+    BER_ofdm_qpsk_with_rep_fadding_more_symbol(n) = error / length(Decoded_data); 
+end 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_ofdm_qpsk_with_rep_fadding_more_symbol); 
+xlabel ('SNR(dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR: QPSK with repetition & Rayleigh Fading Channel'); 
+
+%%%%%%%%%% QPSK No code and Freq Selective Channel: %%%%%%%%%% 
+clear; 
+clc; 
+close all; 
+No_of_Symbols = 500; 
+bits_per_symbol = 128; 
+No_Of_Bits = bits_per_symbol*No_of_Symbols; 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = 0.5; 
+% Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_OFDM_QPSK_no_code_fadding_more_symbol = zeros(1, length(SNR)); 
+%Bit Energy QPSk% 
+Eb_QPSK = ((1 + 1) * 4) / 4/2; 
+%Define No% 
+No_QPSK = Eb_QPSK .* 10 .^ (- .1 .* SNR); 
+h_r =  (variance_h) * randn(1, 64); 
+h_i =  (variance_h) * randn(1, 64); 
+h_QPSK = h_r + h_i * 1i; 
+     
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:No_of_Symbols 
+        %Define Data Burst% 
+        data=my_data(bits_per_symbol*(q-1)+1:bits_per_symbol*q); 
+        % Interleaver % 
+        interleaver_output = Interleaver_Block(data,8,16); 
+        % End of Interleaver %       
+        %Mapper % 
+        [QPSK_Mapper_output] =QPSK_Mapper(interleaver_output,bits_per_symbol); 
+        %% End of Mapper %       
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QPSK_Mapper_output , 64); 
+        %  End of 64-point IFFT %    
+        % Cyclic Extension % 
+        Mapper_output_length= length(QPSK_Mapper_output);        
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*Mapper_output_length/4+1):Mapper_output_length) 
+IFFT_block_output];       
+        % End of Cyclic Extension %     
+        % Fading channel % 
+         %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1);  
+ 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+ 
+        %apply channel effect 
+        [Channel_Output, h_QPSK] = Freq_Select(yk_hat_2 , No_QPSK(n), 0, variance_h, 
+0); 
+        %re-apply ifft 
+        IFFT_block_output = ifft(Channel_Output , 64); 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+        % End of Fading channel % 
+        %%%%%%%%%%%%%%%%% Receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        % Remove cyclic extension 
+        Data_Length=length(Cyclic_Extension_Output); 
+        Decycled_data= Cyclic_Extension_Output((Data_Length/5)+1 : Data_Length); 
+         
+        % FFT 
+        Decycled_data = fft(Decycled_data); 
+         
+         %Remove the channel effect 
+        Data_After_removing_Channel_effect= Decycled_data ./ h_QPSK; 
+         
+        % QPSK Demapper 
+        [QPSK_Demapped_Data] = QPSK_Demapper( Data_After_removing_Channel_effect); 
+         
+        % remove interlever effect 
+        DeInterleaver_Data = Interleaver_Block(QPSK_Demapped_Data,16,8); 
+        temp=[temp DeInterleaver_Data]; 
+    end 
+    DeInterleaver_Data=temp; 
+     
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%% 
+    %%%%%%%%%%%%%%%% Calculating BER %%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(DeInterleaver_Data)) ~= DeInterleaver_Data); 
+    BER_OFDM_QPSK_no_code_fadding_more_symbol(n) = error / length(DeInterleaver_Data); 
+end 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_OFDM_QPSK_no_code_fadding_more_symbol); 
+xlabel ('SNR (dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR: QPSK No Code & Freq Selective Channel'); 
+
+%%%%%%%%%%% QPSK With Repetition Code & Frequency Selective Channel: %%%%%%%%%%%
+%%%%%%%QPSK_Rep_Code_Freq_Selective%%%%%%%%%% 
+clc; 
+close all; 
+%Define the number of symbols% 
+No_of_Symbols =1550; 
+%Define the repetition value% 
+repetition=3; 
+%Define the number of bits per symbol% 
+bits_per_symbol=128; 
+%Define the number of bits per symbol before repetition% 
+No_Of_Bits_Per_Symbol_Before_Repetition = 42; 
+%Define Total number of bits% 
+No_Of_Bits = No_Of_Bits_Per_Symbol_Before_Repetition*No_of_Symbols; 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%Define the number of bits per symbol after repetition% 
+No_Of_Bits_Per_Symbol_After_Repetition=42*3; 
+%Define Padding bits% 
+Padding =bits_per_symbol-No_Of_Bits_Per_Symbol_After_Repetition; 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = 0.5; 
+%Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_OFDM_QPSK_with_rep_no_code_fadding_more_symbol = zeros(1, length(SNR)); 
+%Define Energy per bit% 
+Eb_QPSK = 1/3*((1 + 1) * 4) / 4/2; 
+%Define Noise No% 
+N0_QPSK = Eb_QPSK .* 10 .^ (- .1 .* SNR); 
+h_r =  (variance_h) * randn(1, 64); 
+h_i =  (variance_h) * randn(1, 64); 
+h_QPSK = h_r + h_i * 1i; 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:No_of_Symbols 
+        %Define Data Burst% 
+        data_before_padding=my_data((No_Of_Bits_Per_Symbol_Before_Repetition*(q1)+1):No_Of_Bits_Per_Symbol_Before_Repetition*q); 
+        data_with_rep = repelem(data_before_padding,repetition); 
+        %Pad the data% 
+        data_after_padding=[data_with_rep zeros(1,Padding)]; 
+         
+        %Interleaver% 
+        interleaver_output = Interleaver_Block( data_after_padding,8,16); 
+        % End of Interleaver % 
+          
+ 
+        %Mapper % 
+        [QPSK_Mapper_output] =QPSK_Mapper(interleaver_output,bits_per_symbol); 
+        %% End of Mapper % 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QPSK_Mapper_output , 64); 
+        % End of 64-point IFFT % 
+        %Cyclic Extension % 
+        Mapper_output_length= length(QPSK_Mapper_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*Mapper_output_length/4+1):Mapper_output_length) 
+IFFT_block_output]; 
+        % End of Cyclic Extension % 
+        % Fading channel % 
+         %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+        %apply channel effect 
+        [Channel_Output, h_QPSK] = Freq_Selective(yk_hat_2 , N0_QPSK(n), 0, variance_h, 
+0); 
+        %re-apply ifft 
+        IFFT_block_output = ifft(Channel_Output , 64); 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+        % End of fading channel % 
+        %%%%%%%%%%%%%%%%% Receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        % removing cyclic extension 
+        Data_Length_1=length(Cyclic_Extension_Output); 
+        Decycled_Data= Cyclic_Extension_Output((Data_Length_1/5)+1 : Data_Length_1); 
+ 
+        % remove ifft 
+        Decycled_Data = fft(Decycled_Data); 
+         
+        %remove the channel effect 
+        Data_After_removing_Channel_effect= Decycled_Data ./ h_QPSK; 
+ 
+        % remove mapper 
+        [QPSK_Demapped_Data] = QPSK_Demapper(Data_After_removing_Channel_effect); 
+ 
+        % remove interlever 
+        DeInterleaver_Output = Interleaver_Block(QPSK_Demapped_Data,16,8); 
+  
+ 
+        % remove padding 
+        
+DeInterleaver_Output_without_pading=DeInterleaver_Output(1:length(DeInterleaver_Output)-2); 
+        length_3=length( DeInterleaver_Output_without_pading); 
+ 
+        %%%%%%%%%%%% decoding %%%%%%%%%%%%%%%%%% 
+        Decoded_data = zeros(1, length(DeInterleaver_Output_without_pading) / 3); 
+ 
+        for i = 1:3:length(DeInterleaver_Output_without_pading) 
+            segment = DeInterleaver_Output_without_pading(i:i+2); 
+            Decoded_data((i+2)/3) = mode(segment); % Using the majority voting 
+        end 
+        temp=[temp Decoded_data]; 
+    end 
+    Decoded_data=temp; 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(Decoded_data)) ~= Decoded_data); 
+    BER_OFDM_QPSK_with_rep_no_code_fadding_more_symbol(n) = error / 
+length(Decoded_data); 
+end 
+ 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_OFDM_QPSK_with_rep_no_code_fadding_more_symbol); 
+xlabel (' SNR (dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR QPSK with repetition & Freq Selective Channel'); 
+% interleaver function
+
+%%%%%%%%% 16 QAM No Coding & Frequency Selective Channel: %%%%%%%%%
+clear; 
+clc; 
+close all; 
+%Define the number of symbols% 
+No_of_Symbols =500; 
+%Define the number of bits per symbol% 
+bits_per_symbol=256; 
+%Define Total number of bits% 
+No_Of_Bits = bits_per_symbol*No_of_Symbols; 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = 0.5; 
+%Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_OFDM_16_QAM_no_code_fadding_more_symbol = zeros(1, length(SNR)); 
+%Define Energy per bit% 
+Eb_QAM = ((1 + 1) * 4) / 4/2; 
+%Define Noise No% 
+N0_QPSK = Eb_QAM .* 10 .^ (- .1 .* SNR); 
+h_r =  (variance_h) * randn(1, 64); 
+h_i =  (variance_h) * randn(1, 64); 
+h_QPSK = h_r + h_i * 1i; 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:No_of_Symbols 
+        %Define Data Burst% 
+        data=my_data(bits_per_symbol*(q-1)+1:bits_per_symbol*q); 
+        % Interleaver % 
+        InterLeaver_Output = Interleaver_Block(data,16,16); 
+        % End of Interleaver % 
+        % Mapper % 
+        QAM_16_Mapper_output = QAM_16_Mapper(InterLeaver_Output,1); 
+        % End of Mapper % 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QAM_16_Mapper_output , 64); 
+        Mapper_output_length= length(QAM_16_Mapper_output); 
+        % End of 64-point IFFT % 
+        % Cyclic Extension % 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*Mapper_output_length/4+1):Mapper_output_length) 
+IFFT_block_output]; 
+        % End of Cyclic Extension % 
+  
+ 
+        % Channel % 
+         %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+        %apply channel effect 
+        [Channel_Output, h_QPSK] = Freq_Select(yk_hat_2 , N0_QPSK(n), 0, variance_h, 
+0); 
+        %re-apply ifft 
+        IFFT_block_output = ifft(Channel_Output , 64); 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+        % End of channel % 
+        %%%%%%%%%%%%%%%%% Receiver %%%%%%%%%%%%%%%%%%%%%%% 
+       
+        % removing cyclic extension 
+        Data_length_1=length(Cyclic_Extension_Output); 
+        Decycled_Data= Cyclic_Extension_Output((Data_length_1/5)+1 : Data_length_1); 
+        % remove ifft 
+        Decycled_Data = fft(Decycled_Data); 
+        %remove the channel effect 
+        Data_After_removing_Channel_effect= Decycled_Data ./ h_QPSK; 
+        % remove mapper 
+        QAM_demapper_Output=demod16(Data_After_removing_Channel_effect,1); 
+        % remove interlever 
+        DeInterleaver_Output = Interleaver_Block(QAM_demapper_Output,16,16); 
+        temp=[temp DeInterleaver_Output]; 
+    end 
+    DeInterleaver_Output=temp; 
+ 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(DeInterleaver_Output)) ~= DeInterleaver_Output); 
+    BER_OFDM_16_QAM_no_code_fadding_more_symbol(n) = error / 
+length(DeInterleaver_Output); 
+end 
+ 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_OFDM_16_QAM_no_code_fadding_more_symbol); 
+xlabel ('SNR(dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR 16 QAM No Code & Freq Selective Channel'); 
+
+%%%%%%%%%%%% 16 QAM With Repetition Code & Frequency Selective Channel: %%%%%%%%%%%%
+clear; 
+clc; 
+close all; 
+%Define the number of symbols% 
+No_of_Symbols =1550; 
+%Define the repetition value% 
+repetition=3; 
+%Define the number of bits per symbol% 
+bits_per_symbol=256; 
+%Define the number of bits per symbol before repetition% 
+No_Of_Bits_Per_Symbol_Before_Repetition = 84; 
+%Define the number of bits per symbol after repetition% 
+No_Of_Bits_Per_Symbol_After_Repetition=84*3; 
+Padding =bits_per_symbol-No_Of_Bits_Per_Symbol_After_Repetition; 
+%Define Total number of bits% 
+No_Of_Bits = No_Of_Bits_Per_Symbol_Before_Repetition*No_of_Symbols; 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = 0.5; 
+%Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_OFDM_16_QAM_Coded_Channel_Freq_more_symbol = zeros(1, length(SNR)); 
+%Define Energy per bit% 
+Eb_QAM = 1/3*((1 + 1) * 4) / 4/2; 
+N0_QPSK = Eb_QAM .* 10 .^ (- .1 .* SNR); 
+h_r =  (variance_h) * randn(1, 64); 
+h_i =  (variance_h) * randn(1, 64); 
+h_QPSK = h_r + h_i * 1i; 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:No_of_Symbols 
+        %Define Data Burst% 
+        data_before_padding=my_data((No_Of_Bits_Per_Symbol_Before_Repetition*(q1)+1):No_Of_Bits_Per_Symbol_Before_Repetition*q); 
+        data_with_rep = repelem(data_before_padding,repetition); 
+        data_after_padding=[data_with_rep zeros(1,Padding)]; 
+        % Interleaver %  
+        interleaver_output = Interleaver_Block( data_after_padding,16,16); 
+        % End of Interleaver % 
+        % Mapper % 
+        QAM_Mapper_output = QAM_16_Modulator(interleaver_output,1); 
+        QAM_16_Mapper_output_length= length(QAM_Mapper_output); 
+        % End of Mapper % 
+  
+ 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QAM_Mapper_output , 64); 
+        % End of 64-point IFFT % 
+        % Cyclic Extension % 
+        Cyclic_Extension_Output = [IFFT_block_output((3*QAM_16_Mapper_output_length/4+1):QAM_16_Mapper_output_length) IFFT_block_output]; 
+        % End of Cyclic Extension % 
+        % Channel % 
+         %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+        %apply channel effect 
+        [Channel_Output, h_QPSK] = Freq_Selective(yk_hat_2 , N0_QPSK(n), 0, variance_h, 0); 
+        %re-apply ifft 
+        IFFT_block_output = ifft(Channel_Output , 64); 
+ 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = [IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) IFFT_block_output]; 
+        % End of Channel % 
+        %%%%%%%%%%%%%%%%% Receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        
+        % removing cyclic extension 
+        Data_Length_1 = length(Cyclic_Extension_Output); 
+        Decycled_Data= Cyclic_Extension_Output((Data_Length_1/5)+1 : Data_Length_1); 
+        % remove ifft 
+        Decycled_Data = fft(Decycled_Data); 
+         
+        %remove the channel effect 
+        Data_After_removing_Channel_effect = Decycled_Data ./ h_QPSK; 
+        % remove mapper 
+        QAM_Demapper_Output = demod16(Data_After_removing_Channel_effect,1); 
+        % remove interlever 
+        DeInterleaver_Output = Interleaver_Block(QAM_Demapper_Output,16,16); 
+        %%%% remove padding 
+        
+DeInterleaver_Output_without_pading=DeInterleaver_Output(1:length(DeInterleaver_Output)-4); 
+        length_3=length( DeInterleaver_Output_without_pading); 
+        %%%%%%%%%%%% decoding %%%%%%%%%%%%%%%%%% 
+        Decoded_data = zeros(1, length(DeInterleaver_Output_without_pading) / 3); 
+  
+ 
+        for i = 1:3:length(DeInterleaver_Output_without_pading) 
+            segment = DeInterleaver_Output_without_pading(i:i+2); 
+            Decoded_data((i+2)/3) = mode(segment); % % Using the majority voting 
+        end 
+        temp=[temp Decoded_data]; 
+    end 
+    Decoded_data=temp; 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(Decoded_data)) ~= Decoded_data); 
+    BER_OFDM_16_QAM_Coded_Channel_Freq_more_symbol(n) = error / length(Decoded_data); 
+end 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_OFDM_16_QAM_Coded_Channel_Freq_more_symbol); 
+xlabel ('SNR (dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR 16 QAM with repetition & Freq Selective channel'); 
+
+%%%%%%%%%%%%% 16 QAM No code and Rayleigh Fading Channel: %%%%%%%%%%%%% 
+%Define the number of symbols% 
+numberOfsymbol =500; 
+%Define the number of bits per symbol% 
+bits_per_symbol=256; 
+%Define Total number of bits% 
+No_Of_Bits = bits_per_symbol*numberOfsymbol; 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = sqrt(0.5); 
+%Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_OFDM_QAM_no_code_fadding_more_symbol = zeros(1, length(SNR)); 
+%Define Energy per bit% 
+Eb_QAM = ((1 + 1) * 4) / 4/2; 
+%Define Noise No% 
+N0_QAM = Eb_QAM .* 10 .^ (- .1 .* SNR); 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%channel response generation 
+h_r =  (variance_h) * randn(1, 80); 
+h_i =  (variance_h) * randn(1, 80); 
+h_QAM = h_r + h_i * 1i; 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR 
+    temp=[]; 
+    for q=1:numberOfsymbol 
+        %Define Data Burst% 
+        data=my_data(bits_per_symbol*(q-1)+1:bits_per_symbol*q);  
+ 
+        % Interleaver % 
+        InterLeaver_Output = Interleaver_Block(data,16,16); 
+        % End of Interleaver % 
+        % Mapper % 
+        QAM_16_Mapper_output = QAM_16_Mapper(InterLeaver_Output,1); 
+        % End of Mapper % 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QAM_16_Mapper_output , 64); 
+        Mapper_output_length= length(QAM_16_Mapper_output); 
+        % End of 64-point IFFT % 
+        % Cyclic Extension % 
+        Cyclic_Extension_Output = [IFFT_block_output((3*Mapper_output_length/4+1):Mapper_output_length) IFFT_block_output]; 
+        % End of Cyclic Extension % 
+        %%%%%%%%%%%%%%%%%%% Channel %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+        %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+        %apply channel effect 
+        [data_AfterChannel, h_QAM] = Fading_channel(yk_hat_2, N0_QAM(n),0,h_QAM(1:length(yk_hat_2))); 
+        %re-apply ifft 
+        IFFT_block_output = ifft(data_AfterChannel , 64); 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+        %%%%%%%%%%%%%%%% end of fading channel %%%%%%%%%%%%%%%%%%% 
+        %%%%%%%%%%%%%%%%% receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        % removing cyclic extension 
+        Data_length_1=length(Cyclic_Extension_Output); 
+        Decycled_Data= Cyclic_Extension_Output((Data_length_1/5)+1 : Data_length_1); 
+        % remove ifft 
+        Decycled_Data = fft(Decycled_Data); 
+        %remove the channel effect 
+        Data_After_removing_Channel_effect= Decycled_Data ./ h_QAM; 
+        % remove mapper 
+        QAM_demapper_Output=demod16(Data_After_removing_Channel_effect,1); 
+        % remove interlever 
+        DeInterleaver_Output = Interleaver_Block(QAM_demapper_Output,16,16); 
+        temp=[temp DeInterleaver_Output]; 
+    end 
+    DeInterleaver_Output=temp; 
+ 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5  
+ 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(DeInterleaver_Output)) ~= DeInterleaver_Output); 
+    BER_OFDM_QAM_no_code_fadding_more_symbol(n) = error / length(DeInterleaver_Output); 
+end 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_OFDM_QAM_no_code_fadding_more_symbol); 
+xlabel ('SNR(dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR: 16 QAM No Code & Fading Channel'); 
+ 
+%%%%%%%%%%%%% 16 QAM With repetition code and Fading Channel: %%%%%%%%%%%%%
+%Define the number of symbols% 
+numberOfsymbol =1550; 
+%Define the repetition value% 
+repetition=3; 
+%Define the number of bits per symbol% 
+bits_per_symbol=256; 
+%Define the number of bits per symbol before repetition% 
+No_Of_Bits_Per_Symbol_Before_Repetition=84; 
+%Define the number of bits per symbol after repetition% 
+bits_per_symbol_after_rep=84*3; 
+padding =bits_per_symbol-bits_per_symbol_after_rep; 
+%Define Total number of bits% 
+No_Of_Bits = No_Of_Bits_Per_Symbol_Before_Repetition*numberOfsymbol; 
+%Define Noise% 
+MINIMUM_SNR = -20; 
+MAXIMAUM_SNR = 10; 
+variance_h = 0.5; 
+%Define SNR% 
+SNR = MINIMUM_SNR:MAXIMAUM_SNR; 
+error = zeros(1, length(SNR)); 
+BER_OFDM_QAM_rep_code_fadding_more_symbol = zeros(1, length(SNR)); 
+%Define Energy per bit% 
+Eb_QAM = 1/3*((1 + 1) * 4) / 4/2; 
+N0_QAM = Eb_QAM .* 10 .^ (- .1 .* SNR); 
+% Generating random binary stream % 
+my_data=randi([0 1], 1, No_Of_Bits); 
+%channel response generation 
+h_r =  (variance_h) * randn(1, 80); 
+h_i =  (variance_h) * randn(1, 80); 
+h_QAM = h_r + h_i * 1i; 
+ 
+ 
+ 
+for n = 1:MAXIMAUM_SNR-MINIMUM_SNR  
+ 
+    temp=[]; 
+    for q=1:numberOfsymbol 
+        %Define Data Burst% 
+        data_before_padding=my_data((No_Of_Bits_Per_Symbol_Before_Repetition*(q1)+1):No_Of_Bits_Per_Symbol_Before_Repetition*q); 
+        data_with_rep = repelem(data_before_padding,repetition); 
+        data_after_padding=[data_with_rep zeros(1,padding)]; 
+        % Interleaver % 
+        interleaver_output = Interleaver_Block( data_after_padding,16,16); 
+        % End of Interleaver % 
+        % Mapper % 
+        QAM_Mapper_output = QAM_16_Modulator(interleaver_output,1); 
+        QAM_16_Mapper_output_length= length(QAM_Mapper_output); 
+        % End of Mapper % 
+        % 64-point IFFT % 
+        IFFT_block_output = ifft(QAM_Mapper_output , 64); 
+        % End of 64-point IFFT % 
+        % Cyclic Extension % 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*QAM_16_Mapper_output_length/4+1):QAM_16_Mapper_output_length) 
+IFFT_block_output]; 
+        % End of Cyclic Extension % 
+        %%%%%%%%%%%%%%%%%%%% channel %%%%%%%%%%%%%%%%%%%%5 
+        %remove cyclic effect 
+        length_1=length(Cyclic_Extension_Output); 
+        yk_hat_2=Cyclic_Extension_Output((length_1/5)+1 : length_1); 
+        %apply fft 
+        yk_hat_2 = fft(yk_hat_2); 
+        %apply channel effect 
+        [data_AfterChannel, h_QAM] = Fading_channel(yk_hat_2, 
+N0_QAM(n),0,h_QAM(1:length(yk_hat_2))); 
+        %re-apply ifft 
+        IFFT_block_output = ifft(data_AfterChannel , 64); 
+        %re-apply cyclic extension 
+        IFFT_block_output_length= length(IFFT_block_output); 
+        Cyclic_Extension_Output = 
+[IFFT_block_output((3*IFFT_block_output_length/4+1):IFFT_block_output_length) 
+IFFT_block_output]; 
+        %%%%%%%%%%%%%%%%% receiver %%%%%%%%%%%%%%%%%%%%%%% 
+        Data_Length_1 = length(Cyclic_Extension_Output); 
+        Decycled_Data= Cyclic_Extension_Output((Data_Length_1/5)+1 : Data_Length_1); 
+        % remove ifft 
+        Decycled_Data = fft(Decycled_Data); 
+        %remove the channel effect 
+        Data_After_removing_Channel_effect = Decycled_Data ./ h_QAM; 
+        % remove mapper 
+        QAM_Demapper_Output = demod16(Data_After_removing_Channel_effect,1); 
+ 
+        % remove interlever  
+ 
+        DeInterleaver_Output = Interleaver_Block(QAM_Demapper_Output,16,16); 
+        %%%% remove padding 
+        
+DeInterleaver_Output_without_pading=DeInterleaver_Output(1:length(DeInterleaver_Output)-4); 
+        length_3=length( DeInterleaver_Output_without_pading); 
+        %%%%%%%%%%%% decoding %%%%%%%%%%%%%%%%%% 
+        Decoded_data = zeros(1, length(DeInterleaver_Output_without_pading) / 3); 
+        for i = 1:3:length(DeInterleaver_Output_without_pading) 
+            segment = DeInterleaver_Output_without_pading(i:i+2); 
+            Decoded_data((i+2)/3) = mode(segment); % % Using the majority voting 
+        end 
+        temp=[temp Decoded_data]; 
+    end 
+    Decoded_data=temp; 
+    %%%%%%%%%%%%%%% End of receiver %%%%%%%%%%%%%%%%%%%%%5 
+    %%%%%%%%%%%%%%%%%%%%%%%%%BER calculate %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+    error = sum(my_data(1:length(Decoded_data)) ~= Decoded_data); 
+    BER_OFDM_QAM_rep_code_fadding_more_symbol(n) = error / length(Decoded_data); 
+end 
+semilogy(MINIMUM_SNR:MAXIMAUM_SNR,BER_OFDM_QAM_rep_code_fadding_more_symbol); 
+xlabel ('SNR(dB)'); 
+ylabel('BER'); 
+grid on 
+title('BER vs SNR: 16 QAM with repetition & Fading channel'); 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% The Functions used: %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Interleaver Function: 
+function [interleaver_Data] =Interleaver_Block(Data,rows,coloumns) 
+interleaver_Data = []; 
+Intrlv_Size = rows * coloumns; 
+No_of_bits = length(Data); 
+for i = 1:No_of_bits/Intrlv_Size 
+    interleaver_Data =horzcat(interleaver_Data,matintrlv(Data((i1)*Intrlv_Size+1:i*Intrlv_Size),rows,coloumns)); 
+end 
+end 
+  
+QPSK Mapper Function: 
+function [QPSK_Mapper_output] =QPSK_Mapper(interleaver_output,bits_per_symbol) 
+k = 1; 
+QPSK_Symbols = [ -1-1i -1+1i 1-1i 1+1i ]; 
+% Mapping to symbols% 
+% Mapping 00 to -1-i % 
+% Mapping 01 to -1+i % 
+% Mapping 10 to 1-i % 
+% Mapping 11 to 1+i % 
+QPSK_Mapper_output = zeros(1, bits_per_symbol / 2); 
+for g = 1:bits_per_symbol / 2 
+    which_Symbol = (interleaver_output(k)*2+interleaver_output(k+1))+1; 
+    QPSK_Mapper_output(g) = QPSK_Symbols(which_Symbol); 
+    k =k+2; 
+end 
+end 
+ 
+%QPSK DeMapper Function: 
+ 
+function [QPSK_Demapped_Data] = QPSK_Demapper(Decycled_Data) 
+Received_data = Decycled_Data; 
+size_of_sig = length(Received_data); 
+QPSK_Demapped_Data = zeros(1,size_of_sig*2); 
+l = 1; 
+% Receiver decisions % 
+% Since symbols are equiprobable % 
+% Decision regions are a quadrant for every symbol % 
+for v = 1:size_of_sig %32 
+    if real(Received_data(v)) <= 0 && imag(Received_data(v)) <= 0 
+        QPSK_Demapped_Data(l) = 0; 
+        QPSK_Demapped_Data(l+1) = 0; 
+    elseif real(Received_data(v)) <= 0 && imag(Received_data(v)) >= 0 
+        QPSK_Demapped_Data(l) = 0;  
+        QPSK_Demapped_Data(l+1) = 1; 
+    elseif real(Received_data(v)) >= 0 && imag(Received_data(v)) <= 0 
+        QPSK_Demapped_Data(l) = 1; 
+        QPSK_Demapped_Data(l+1) = 0; 
+    elseif real(Received_data(v)) >= 0 && imag(Received_data(v)) >= 0 
+        QPSK_Demapped_Data(l) = 1; 
+        QPSK_Demapped_Data(l+1) = 1; 
+    end 
+    l = l + 2; 
+end 
+end 
+ 
+ 
+%16-QAM Mapper(No Code): 
+ 
+function[QAM_16_output]=QAM_16_Mapper(Data,A) 
+No_of_bits=length(Data); 
+padding=4-mod(No_of_bits,4); 
+if padding~=4 
+    Data(end+1:end+padding)=0; 
+end 
+QAM_16_output=zeros(1,No_of_bits/4); 
+k = 1; 
+for B = 1 : 4 : No_of_bits 
+    % 0000 mapped to -3-3i 
+    if(Data(B) == 0 && Data(B+1) == 0 && Data(B+2)== 0 && Data(B+3)==0)%0000 
+        QAM_16_output(1,k) = -3*A-A*3i; 
+        % 0110 mapped to -1+3i 
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==0)%0110 
+        QAM_16_output(1,k) = -A+3*A*1i; 
+        % 0101 mapped to -1-1i 
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==1)%0101 
+        QAM_16_output(1,k) = -A-A*1i; 
+        % 0001 mapped to -3-1i 
+    elseif(Data(B) ==0 && Data(B+1) == 0&& Data(B+2)==0 && Data(B+3)==1)%0001 
+        QAM_16_output(1,k) = -3*A-A*1i; 
+        % 1000 mapped to 3-3i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==0 && Data(B+3)==0)%1000 
+        QAM_16_output(1,k) =3*A-3*A*1i; 
+        % 1011 mapped to 3+1i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==1 && Data(B+3)==1)%1011 
+        QAM_16_output(1,k) =3*A+A*1i; 
+        % 1110 mapped to A+3*A*1i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==0)%1110 
+        QAM_16_output(1,k) = A+3*A*1i; 
+        % 0111 mapped to -1+1i  
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==1)%0111 
+        QAM_16_output(1,k) = -A+A*1i; 
+        % 1010 mapped to 3+3i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==1 && Data(B+3)==0)%1010 
+        QAM_16_output(1,k) = 3*A+3*A*1i; 
+        % 1100 mapped to 1-3i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==0)%1100 
+        QAM_16_output(1,k) =A-3*A*1i; 
+        % 1101 mapped to 1-1i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==1)%1101 
+        QAM_16_output(1,k) = A-A*1i; 
+        % 1111 mapped to 1+1i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==1)%1111 
+        QAM_16_output(1,k) =A+A*1i; 
+        % 0010 mapped to -3+3i 
+    elseif(Data(B) ==0 && Data(B+1) == 0&& Data(B+2)==1 && Data(B+3)==0)%0010 
+        QAM_16_output(1,k) = -3*A+A*3*1i; 
+        % 1001 mapped to 3-1i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==0 && Data(B+3)==1)%1001 
+        QAM_16_output(1,k) =3*A-A*1i; 
+        % 0100 mapped to -1-3i 
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==0)%0100 
+        QAM_16_output(1,k) = -1*A-A*3*1i; 
+        % 0011 mapped to -3+1i 
+    else %0011 
+        QAM_16_output(1,k) = -3*A+A*1i; 
+    end 
+    k = k + 1; 
+end 
+end 
+ 
+%16-QAM DeMapper(No Code): 
+ 
+function[Output_Signal_QAM_16]=demod16(Output_Signal_QAM_16_Noise,A) 
+L=length(Output_Signal_QAM_16_Noise); 
+Output_Signal_QAM_16=zeros(1,4*L); 
+QAM_16_Counter = 1; 
+for j=1:L 
+    if (real(Output_Signal_QAM_16_Noise(1,j)) >= 0 && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=0) % ---- first quadarture ---- % 
+        if (real(Output_Signal_QAM_16_Noise(1,j)) >=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=2*A)  
+ 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    elseif(real(Output_Signal_QAM_16_Noise(1,j))<=0 && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=0) % ---- Second quadarture ---- % 
+        if(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    elseif(real(Output_Signal_QAM_16_Noise(1,j))<=0 && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=0)% ---- Third quadarture ---- % 
+        if(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A)  
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    else % ---- Fourth quadarture ---- % 
+        if(real(Output_Signal_QAM_16_Noise(1,j))>=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(QAM_16_Counter)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    end 
+    QAM_16_Counter = QAM_16_Counter + 4; 
+end 
+end 
+ %16QAM Mapper (With Repetition Code): 
+ 
+function[QAM_16_Data]=QAM_16_Modulator(Data,A) 
+No_of_bits=length(Data); 
+padding=4-mod(No_of_bits,4); 
+if padding~=4 
+    Data(end+1:end+padding)=0; 
+end 
+QAM_16_Data=zeros(1,No_of_bits/4); 
+k = 1; 
+for B = 1 : 4 : No_of_bits 
+    % 0000 mapped to -3-3i 
+    if(Data(B) == 0 && Data(B+1) == 0 && Data(B+2)== 0 && Data(B+3)==0)%0000 
+        QAM_16_Data(1,k) = -3*A-A*3i; 
+        % 0110 mapped to -1+3i  
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==0)%0110 
+        QAM_16_Data(1,k) = -A+3*A*1i; 
+        % 0101 mapped to -1-1i 
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==1)%0101 
+        QAM_16_Data(1,k) = -A-A*1i; 
+        % 0001 mapped to -3-1i 
+    elseif(Data(B) ==0 && Data(B+1) == 0&& Data(B+2)==0 && Data(B+3)==1)%0001 
+        QAM_16_Data(1,k) = -3*A-A*1i; 
+        % 1000 mapped to 3-3i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==0 && Data(B+3)==0)%1000 
+        QAM_16_Data(1,k) =3*A-3*A*1i; 
+        % 1011 mapped to 3+1i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==1 && Data(B+3)==1)%1011 
+        QAM_16_Data(1,k) =3*A+A*1i; 
+        % 1110 mapped to A+3*A*1i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==0)%1110 
+        QAM_16_Data(1,k) = A+3*A*1i; 
+        % 0111 mapped to -1+1i 
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==1)%0111 
+        QAM_16_Data(1,k) = -A+A*1i; 
+        % 1010 mapped to 3+3i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==1 && Data(B+3)==0)%1010 
+        QAM_16_Data(1,k) = 3*A+3*A*1i; 
+        % 1100 mapped to 1-3i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==0)%1100 
+        QAM_16_Data(1,k) =A-3*A*1i; 
+        % 1101 mapped to 1-1i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==1)%1101 
+        QAM_16_Data(1,k) = A-A*1i; 
+        % 1111 mapped to 1+1i 
+    elseif(Data(B) ==1 && Data(B+1) == 1&& Data(B+2)==1 && Data(B+3)==1)%1111 
+        QAM_16_Data(1,k) =A+A*1i; 
+        % 0010 mapped to -3+3i 
+    elseif(Data(B) ==0 && Data(B+1) == 0&& Data(B+2)==1 && Data(B+3)==0)%0010 
+        QAM_16_Data(1,k) = -3*A+A*3*1i; 
+        % 1001 mapped to 3-1i 
+    elseif(Data(B) ==1 && Data(B+1) == 0&& Data(B+2)==0 && Data(B+3)==1)%1001 
+        QAM_16_Data(1,k) =3*A-A*1i; 
+        % 0100 mapped to -1-3i 
+    elseif(Data(B) ==0 && Data(B+1) == 1&& Data(B+2)==0 && Data(B+3)==0)%0100 
+        QAM_16_Data(1,k) = -1*A-A*3*1i; 
+        % 0011 mapped to -3+1i 
+    else %0011 
+        QAM_16_Data(1,k) = -3*A+A*1i; 
+    end 
+    k = k + 1; 
+end 
+end  
+ 
+%16 QAM DeMapper (With Repetition Code): 
+function[Output_Signal_QAM_16]=demod16(Output_Signal_QAM_16_Noise,A) 
+L=length(Output_Signal_QAM_16_Noise); 
+Output_Signal_QAM_16=zeros(1,4*L); 
+QAM_16_Counter = 1; 
+for j=1:L 
+    if (real(Output_Signal_QAM_16_Noise(1,j)) >= 0 && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=0) % ---- first quadarture ---- % 
+        if (real(Output_Signal_QAM_16_Noise(1,j)) >=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    elseif(real(Output_Signal_QAM_16_Noise(1,j))<=0 && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=0) % ---- Second quadarture ---- % 
+        if(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=1;Output_Signal_QAM_16(QAM_16_Counter+3)=1;  
+ 
+        end 
+    elseif(real(Output_Signal_QAM_16_Noise(1,j))<=0 && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=0)% ---- Third quadarture ---- % 
+        if(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=-2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=0; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    else % ---- Fourth quadarture ---- % 
+        if(real(Output_Signal_QAM_16_Noise(1,j))>=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; Output_Signal_QAM_16(QAM_16_Counter+2)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))>=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))>=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=0; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        elseif(real(Output_Signal_QAM_16_Noise(1,j))<=2*A && 
+imag(Output_Signal_QAM_16_Noise(1,j))<=-2*A) 
+            Output_Signal_QAM_16(1,QAM_16_Counter)=1; 
+Output_Signal_QAM_16(1,QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=0; 
+        else 
+            Output_Signal_QAM_16(QAM_16_Counter)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+1)=1; 
+Output_Signal_QAM_16(QAM_16_Counter+2)=0;Output_Signal_QAM_16(QAM_16_Counter+3)=1; 
+        end 
+    end 
+    QAM_16_Counter = QAM_16_Counter + 4; 
+end 
+end 
+  
+ 
+%Frequency Selective Channel: 
+%Channel Block 
+function [Channel_Output, h] = Freq_Select(signal, variance_val_n, mean_val_n, 
+variance_val_h, mean_val_h) 
+h_r = mean_val_h + (variance_val_h) * randn(1, length(signal)); 
+h_i = mean_val_h + (variance_val_h) * randn(1, length(signal)); 
+h = h_r + h_i * 1i; 
+noise_real = (variance_val_n / 2) .* randn(1, length(signal)) + mean_val_n; 
+noise_img = ((variance_val_n / 2) .* randn(1, length(signal)) + mean_val_n) * 1i; 
+Channel_Output = h .* signal + (noise_real + noise_img); 
+end 
+ 
+%Flat Fading Channel 
+function [Channel_Output, h] = Fading_channel(signal, variance_val_n, mean_val_n,h) 
+    noise_real = (variance_val_n / 2) .* randn(1, length(signal)) + mean_val_n; 
+    noise_img = ((variance_val_n / 2) .* randn(1, length(signal)) + mean_val_n) * 1i; 
+    Channel_Output = h .* signal + (noise_real + noise_img); 
+end
