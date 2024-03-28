@@ -1,0 +1,258 @@
+%%%%%%%%%%%%%%% BPSK %%%%%%%%%%%%%%%%
+clear 
+clc 
+no_rand_bits = 3000; 
+%Generate Random Bit stream 
+bk_rep1 = randi(2,1,no_rand_bits)-1; 
+bk_rep3 = randi(2,1,no_rand_bits)-1; 
+%Generate BPSK symbols based on the bit stream 
+Eb = 1; 
+rep = 1;% change for repetition 
+bk_rep = repelem(bk_rep1,rep); 
+bk_nrz = bk_rep*2 - 1; 
+Xk_rep1 = bk_nrz.*sqrt(Eb); 
+rep = 3;% change for repetition 
+bk_rep = repelem(bk_rep3,rep); 
+bk_nrz = bk_rep*2 - 1; 
+Xk_rep3 = bk_nrz.*sqrt(Eb); 
+%Generate the complex channel vector and noise 
+Eb_No = -50:.1:15; 
+rep = 1; 
+BER_rep1 = BER_BPSK(Xk_rep1,Eb_No,rep); 
+rep = 3; 
+BER_rep3 = BER_BPSK(Xk_rep3,Eb_No,rep); 
+%ploting  
+figure; 
+plot(Eb_No,BER_rep1,'-r','LineWidth',3); 
+hold on; 
+plot(Eb_No,BER_rep3,'b-','LineWidth',3); 
+xlabel('E_b/N_0'); 
+ylabel('BER'); 
+title('Plot of BER of BPSK-rep1 and BPSK-rep3 versus E-b/N-0'); 
+legend('BPSK-rep1','BPSK-rep3'); 
+grid on; 
+
+%%%%%%%%%%%%%%% QPSK %%%%%%%%%%%%%%%%
+clear 
+clc 
+%some parameters 
+no_rand_bits = 3000; 
+Eb_No = -50:0.1:15; 
+QPSK_Symbols = [ -1-1i -1+1i 1-1i 1+1i ]; 
+rep1 = 1; 
+rep3 = 3; 
+%generating bk_qpsk_rep1 and calculating BER 
+bk_qpsk_rep1 = zeros(1,no_rand_bits*rep1); 
+for g = 1:rep1:no_rand_bits 
+    bk = randi(4); 
+    for w = 1:rep1 
+        bk_qpsk_rep1(g + w-1) = QPSK_Symbols(bk); 
+    end 
+end 
+BER_QPSK_REP1 = BER_QPSK(bk_qpsk_rep1,Eb_No,rep1); 
+ 
+%generating bk_qpsk_rep3 and calculate BER 
+bk_qpsk_rep3 = repelem(bk_qpsk_rep1,rep3); 
+BER_QPSK_REP3 = BER_QPSK(bk_qpsk_rep3,Eb_No,rep3); 
+%ploting  
+figure; 
+plot(Eb_No,BER_QPSK_REP1,'-r','LineWidth',3); 
+hold on; 
+plot(Eb_No,BER_QPSK_REP3,'b-','LineWidth',3); 
+xlabel('E_b/N_0'); 
+ylabel('BER'); 
+title('Plot of BER of QPSK-rep1 and QPSK-rep3 versus E-b/N-0'); 
+legend('QPSK-rep1','QPSK-rep3'); 
+grid on; 
+
+%%%%%%%%%%%%%%% 16 QAM %%%%%%%%%%%%%%%%
+
+clear 
+clc 
+QAM16_Symbols = [ -3-3i -3-1i -3+3i -3+1i -1-3i -1-1i -1+3i -1+1i 
+1-3i 1-1i 1+3i 1+1i 3-3i 3-1i 3+3i 3+1i]; 
+rep1 = 1; 
+rep3 = 3; 
+Eb_No = -50:0.1:15; 
+no_rand_bits = 3000; 
+bk_16qam_rep1 = zeros(1,no_rand_bits*rep1); 
+for g = 1:rep1:no_rand_bits 
+    bk = randi(16); 
+    for w = 1:rep1 
+        bk_16qam_rep1(g + w-1) = QAM16_Symbols(bk); 
+    end 
+end 
+ 
+%calculating BER of BER_16QAM_REP1 
+BER_16QAM_REP1 = BER_16QAM(bk_16qam_rep1,Eb_No,rep1); 
+ 
+%calculating BER of BER_16QAM_REP3 
+bk_16qam_rep3  = repelem(bk_16qam_rep1,rep3); 
+BER_16QAM_REP3 = BER_16QAM(bk_16qam_rep3,Eb_No,rep3); 
+ 
+%ploting  
+figure; 
+plot(Eb_No,BER_16QAM_REP1,'-r','LineWidth',3); 
+hold on; 
+plot(Eb_No,BER_16QAM_REP3,'b-','LineWidth',3); 
+xlabel('E_b/N_0'); 
+ylabel('BER'); 
+title('Plot of BER of 16QAM-rep1 and 16QAM-rep3 versus E-b/N-0'); 
+legend('16QAM-rep1','16QAM-rep3'); 
+grid on;
+
+%%%%%%%%%%%%% Used Functions %%%%%%%%%%%%%%%
+function [BER] = BER_BPSK(xk,Eb_No,rep) 
+no_rand_bits = length(xk); 
+BER = []; 
+for k = 1:length(Eb_No) 
+    hr = normrnd(0,1/2,1,no_rand_bits); 
+    hi = 1j*normrnd(0,1/2,1,no_rand_bits); 
+    Eb_No_lin = 10.^(0.1*Eb_No(k)); 
+    nc = normrnd(0,1/(2*Eb_No_lin),1,no_rand_bits); 
+    ns = 1j*normrnd(0,1/(2*Eb_No_lin),1,no_rand_bits); 
+    %Compute the received symbol vector 
+    yk = (hr + hi).*xk +(nc + ns); 
+    % channel invertion 
+    yk = yk ./ (hr + hi); 
+    %decision device 
+    bk_hat = ones(1,no_rand_bits); 
+    for v = 1:no_rand_bits 
+        if yk(v) <= 0 
+            bk_hat(v) = -1; 
+        end 
+    end 
+    % BER calculation 
+    bit_error = 0; 
+    count = 0; 
+    for v = 1:rep:no_rand_bits 
+        for s = 0 : rep-1 
+            if xk(v+s) ~= bk_hat(v+s) 
+                count = count + 1; 
+            end 
+        end 
+        if count >= rep / 2 
+            bit_error = bit_error + 1; 
+        end 
+        count = 0; 
+    end 
+    bit_error = bit_error / no_rand_bits; 
+    BER(k) = bit_error; 
+end 
+end
+
+function [BER] = BER_QPSK(xk,Eb_No,rep) 
+no_rand_bits = length(xk); 
+BER = []; 
+for k = 1:length(Eb_No) 
+    hr = normrnd(0,1/2,1,no_rand_bits); 
+    hi = 1j*normrnd(0,1/2,1,no_rand_bits); 
+    Eb_No_lin = 10.^(0.1*Eb_No(k)); 
+    nc = normrnd(0,1/(2*Eb_No_lin),1,no_rand_bits); 
+    ns = 1j*normrnd(0,1/(2*Eb_No_lin),1,no_rand_bits); 
+    %Compute the received symbol vector 
+    yk = (hr + hi).*xk +(nc + ns); 
+    % channel invertion 
+    yk = yk ./ (hr + hi); 
+    %decision device 
+    bk_hat = ones(1,no_rand_bits); 
+    for v = 1:no_rand_bits 
+        if real(yk(v)) <= 0 && imag(yk(v)) <= 0 
+            bk_hat(v) = -1 - 1i; 
+        elseif  real(yk(v)) <= 0 && imag(yk(v)) >= 0 
+            bk_hat(v) = -1 + 1i; 
+        elseif  real(yk(v)) >= 0 && imag(yk(v)) <= 0 
+            bk_hat(v) = 1 - 1i; 
+        elseif  real(yk(v)) >= 0 && imag(yk(v)) >= 0 
+            bk_hat(v) = 1 + 1i; 
+        end 
+    end 
+    bit_error = 0; 
+    count = 0; 
+    for v = 1:rep:no_rand_bits 
+        for s = 0 : rep-1 
+            if xk(v+s) ~= bk_hat(v+s) 
+                count = count + 1; 
+            end 
+        end 
+        if count >= rep / 2 
+            bit_error = bit_error + 1; 
+        end 
+        count = 0; 
+    end 
+    bit_error = bit_error / no_rand_bits; 
+    BER(k) = bit_error; 
+end 
+end
+
+
+function [BER] = BER_16QAM(xk,Eb_No,rep) 
+no_rand_bits = length(xk); 
+BER = []; 
+for k = 1:length(Eb_No) 
+    hr = normrnd(0,1/2,1,no_rand_bits); 
+    hi = 1j*normrnd(0,1/2,1,no_rand_bits); 
+    Eb_No_lin = 10.^(0.1*Eb_No(k)); 
+    nc = normrnd(0,1/(2*Eb_No_lin),1,no_rand_bits); 
+    ns = 1j*normrnd(0,1/(2*Eb_No_lin),1,no_rand_bits); 
+    %Compute the received symbol vector 
+    yk = (hr + hi).*xk +(nc + ns); 
+    % channel invertion 
+    yk = yk ./ (hr + hi); 
+    %decision device 
+    bk_hat = ones(1,no_rand_bits); 
+    for v = 1:no_rand_bits 
+        if real(yk(v)) <= 0 && real(yk(v)) >= -2 &&  imag(yk(v)) <= 0 && imag(yk(v)) >= -2 
+            bk_hat(v) = -1 - 1i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) <= -2 &&  imag(yk(v)) <= 0 && imag(yk(v)) >= -2 
+            bk_hat(v) = -3 - 1i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) >= 2 &&  imag(yk(v)) <= 0 && imag(yk(v)) >= -2 
+            bk_hat(v) = 3 - 1i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) <= 2 &&  imag(yk(v)) <= 0 && imag(yk(v)) >= -2 
+            bk_hat(v) = 1 - 1i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) >= -2 &&  imag(yk(v)) >= 0 && imag(yk(v)) <= 2 
+            bk_hat(v) = -1 + 1i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) <= -2 &&  imag(yk(v)) >= 0 && imag(yk(v)) <= 2 
+            bk_hat(v) = -3 + 1i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) >= 2 &&  imag(yk(v)) >= 0 && imag(yk(v)) <= 2 
+            bk_hat(v) = 3 + 1i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) <= 2 &&  imag(yk(v)) >= 0 && imag(yk(v)) <= 2 
+            bk_hat(v) = 1 + 1i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) >= -2 &&  imag(yk(v)) <= 0 && imag(yk(v)) <= -2 
+            bk_hat(v) = -1 - 3i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) <= -2 &&  imag(yk(v)) <= 0 && imag(yk(v)) <= -2 
+            bk_hat(v) = -3 - 3i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) >= 2 &&  imag(yk(v)) <= 0 && imag(yk(v)) <= -2 
+            bk_hat(v) = 3 - 3i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) <= 2 &&  imag(yk(v)) <= 0 && imag(yk(v)) <= -2 
+            bk_hat(v) = 1 - 3i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) >= -2 &&  imag(yk(v)) >= 0 && imag(yk(v)) >= 2 
+            bk_hat(v) = -1 + 3i; 
+        elseif  real(yk(v)) <= 0 && real(yk(v)) <= -2 &&  imag(yk(v)) >= 0 && imag(yk(v)) >= 2 
+            bk_hat(v) = -3 + 3i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) >= 2 &&  imag(yk(v)) >= 0 && imag(yk(v)) >= 2 
+            bk_hat(v) = 3 + 3i; 
+        elseif  real(yk(v)) >= 0 && real(yk(v)) <= 2 &&  imag(yk(v)) >= 0 && imag(yk(v)) >= 2 
+            bk_hat(v) = 1 + 3i; 
+        end 
+    end 
+bit_error = 0; 
+    count = 0; 
+    for v = 1:rep:no_rand_bits 
+        for s = 0 : rep-1 
+            if xk(v+s) ~= bk_hat(v+s) 
+                count = count + 1; 
+            end 
+        end 
+        if count >= rep / 2 
+            bit_error = bit_error + 1; 
+        end 
+        count = 0; 
+    end 
+    bit_error = bit_error / no_rand_bits; 
+    BER(k) = bit_error; 
+end 
+end
+ 
+
+ 
